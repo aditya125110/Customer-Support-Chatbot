@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Repair Shop Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Microphone button styles */
+        .mic-btn {
+            padding: 10px;
+            background-color: #2A3335; /* Primary color background */
+            color: white; /* Light text color */
+            border: 2px solid #2A3335; /* Primary color border */
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-left: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 55px;
+            height: 50px;
+            font-size: 20px;
+        }
+
+        .mic-btn:hover {
+            background-color: #3D4A4C; /* Slightly lighter on hover */
+            color: white;
+        }
+
+        .mic-btn:active {
+            background-color: #3D4A4C;
+        }
+
+        .mic-btn.recording {
+            animation: pulse 1s infinite;
+            background-color: #4E5A5C;
+        }
+
+        .mic-btn.recording.active {
+            background-color: #2A3335;
+            color: white;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                background-color: #3D4A4C;
+            }
+            50% {
+                transform: scale(1.2);
+                background-color: #3D4A4C;
+            }
+            100% {
+                transform: scale(1);
+                background-color: #3D4A4C;
+            }
+        }
+
+        /* Time styling */
+        .message-time {
+            font-size: 12px;
+            color: #2A3335;
+            text-align: right;
+            margin-top: 5px;
+        }
+
+        .speaker-btn {
+            background: none;
+            border: none;
+            color: #2A3335;
+            cursor: pointer;
+            margin-left: -2px;
+            font-size: 13px;
+        }
+
+        .speaker-btn:hover {
+            color: #3D4A4C;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="welcome-text">Welcome to Pitstop Solutions</div>
+        <hr class="thin-line"> 
+        <div class="chat-box" id="chatBox"></div>
+        <div class="options" id="options"></div>
+        <hr class="input-line">
+        <div class="input-section">
+            <input type="text" id="userInput" class="input-box" placeholder="Type your message..." />
+            <button id="micBtn" class="mic-btn"><i class="fas fa-microphone"></i></button>
+            <svg id="sendIcon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-send" viewBox="0 0 16 16">
+                <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576zm6.787-8.201L1.591 6.602l4.339 2.76z"/>
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chatBox');
+        const optionsBox = document.getElementById('options');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const micBtn = document.getElementById('micBtn');
+        let currentUtterance = null;
+
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function addMessage(message, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender === 'bot' ? 'bot-message' : 'user-message');
+            
+            // Add message text
+            const textSpan = document.createElement('span');
+            textSpan.textContent = message;
+            messageDiv.appendChild(textSpan);
+
+            // Add speaker button for bot messages
+            if (sender === 'bot') {
+                const speakerBtn = document.createElement('button');
+                speakerBtn.classList.add('speaker-btn');
+                speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>'; // Font Awesome icon
+                speakerBtn.onclick = () => {
+                    if (currentUtterance && speechSynthesis.speaking) {
+                        speechSynthesis.cancel();
+                        currentUtterance = null;
+                        speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>'; // Speaker on icon
+                    } else {
+                        currentUtterance = new SpeechSynthesisUtterance(message);
+                        speechSynthesis.speak(currentUtterance);
+                        speakerBtn.innerHTML = '<i class="fas fa-volume-mute"></i>'; // Speaker off icon
+                        currentUtterance.onend = () => {
+                            currentUtterance = null;
+                            speakerBtn.innerHTML = '<i class="fas fa-volume-up"></i>'; // Speaker on icon
+                        };
+                    }
+                };
+                messageDiv.appendChild(speakerBtn);
+            }
+
+            // Add timestamp
+            const timeDiv = document.createElement('div');
+            timeDiv.classList.add('message-time');
+            timeDiv.textContent = getCurrentTime();
+            messageDiv.appendChild(timeDiv);
+
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function addOptions(options) {
+            optionsBox.innerHTML = '';
+            options.forEach(option => {
+                const button = document.createElement('button');
+                button.classList.add('btn-option');
+                button.textContent = option;
+                button.onclick = () => sendMessage(option);
+                optionsBox.appendChild(button);
+            });
+        }
+
+        function sendMessage(message) {
+            addMessage(message, 'user');
+            fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const typingDiv = document.createElement('div');
+                typingDiv.classList.add('typing-animation');
+                for (let i = 0; i < 3; i++) {
+                    const dot = document.createElement('div');
+                    dot.classList.add('typing-dot');
+                    typingDiv.appendChild(dot);
+                }
+                chatBox.appendChild(typingDiv);
+
+                setTimeout(() => {
+                    chatBox.removeChild(typingDiv);
+                    addMessage(data.response, 'bot');
+                    if (data.options) addOptions(data.options);
+                    window.scrollTo(0, document.body.scrollHeight);
+                }, 1500);
+            });
+        }
+
+        // Voice recognition logic
+        let recognition;
+        let finalTranscript = '';
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = true; // Enable interim results to get real-time transcription
+            recognition.maxAlternatives = 1; // Only get the best match
+            recognition.continuous = true; // Keep the recognition going even after pauses
+
+            // Start recording when the button is pressed
+            micBtn.addEventListener('mousedown', () => {
+                micBtn.classList.add('recording');
+                micBtn.classList.add('active');
+                recognition.start();
+            });
+
+            // Stop recording when the mouse is released or leaves the button
+            micBtn.addEventListener('mouseup', () => {
+                recognition.stop();
+                micBtn.classList.remove('recording');
+                micBtn.classList.remove('active');
+            });
+
+            micBtn.addEventListener('mouseleave', () => {
+                recognition.stop();
+                micBtn.classList.remove('recording');
+                micBtn.classList.remove('active');
+            });
+
+            // When speech recognition starts
+            recognition.onstart = () => {
+                console.log('Recording started...');
+            };
+
+            // Update the input field with the interim result as the user speaks
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const result = event.results[i];
+                    if (result.isFinal) {
+                        finalTranscript += result[0].transcript;
+                    } else {
+                        interimTranscript += result[0].transcript;
+                    }
+                }
+                userInput.value = finalTranscript + ' ' + interimTranscript; // Append interim results to the final transcript
+            };
+
+            // Handle speech recognition errors
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                alert('Speech recognition error. Please try again.');
+                micBtn.classList.remove('recording');
+                micBtn.classList.remove('active');
+            };
+
+            // When speech recognition ends
+            recognition.onend = () => {
+                console.log('Recording stopped.');
+                micBtn.classList.remove('recording');
+                micBtn.classList.remove('active');
+                finalTranscript = userInput.value; // Update final transcript when recognition ends
+            };
+        } else {
+            micBtn.disabled = true;
+            micBtn.title = 'Speech recognition is not supported in your browser.';
+        }
+
+        window.onload = function() {
+            fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: '' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage(data.response, 'bot');
+                if (data.options.length > 0) {
+                    addOptions(data.options);
+                }
+            });
+        };
+
+        const sendIcon = document.getElementById('sendIcon');
+
+        sendIcon.addEventListener('click', () => {
+            const message = userInput.value.trim();
+            if (message) sendMessage(message);
+            userInput.value = '';
+            finalTranscript = ''; // Clear final transcript after sending message
+        });
+        
+        userInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const message = this.value.trim();
+                if (message) sendMessage(message);
+                this.value = '';
+                finalTranscript = ''; // Clear final transcript after sending message
+            }
+        });
+    </script>
+    
+</body>
+</html>
